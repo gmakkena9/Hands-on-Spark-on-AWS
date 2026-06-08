@@ -28,6 +28,27 @@ The core problem this project solves is the need for manual data processing. In 
 `S3 (Upload) -> Lambda (Trigger) -> AWS Glue (Spark Job) -> S3 (Processed Results)`
 
 ---
+### 🔐 IAM Permissions Breakdown
+
+For this pipeline to work seamlessly, two key security boundaries are established:
+* **Lambda Execution Role:** Granted `glue:StartJobRun` permissions so it has the authority to spin up the Glue Spark cluster when an S3 event fires.
+* **Glue Service Role (`AWSGlueServiceRole-Reviews`):** Granted `AmazonS3FullAccess` (or bucket-specific policies) so the managed Spark environment can read the incoming CSV streams and write back to your target data lake locations.
+
+---
+
+## 🧠 Under the Hood: PySpark & SQL Logic
+
+Instead of treating the scripts like a black box, here is exactly what happens to the data during the Glue ETL execution:
+
+1. **Schema Enforcement & Initialization:** The script initializes a SparkSession and reads the raw `reviews.csv` file from S3 into a Spark DataFrame, inferring columns such as `review_id`, `customer_id`, `product_id`, `rating`, and `review_date`.
+2. **Data Cleansing:** It drops malformed rows or missing data fields (e.g., reviews without a valid `rating` or `customer_id`).
+3. **Analytical Aggregations (Spark SQL):** The script registers the cleaned data as a temporary view and runs three distinct analytical operations:
+   * **Daily Review Counts:** Groups data by `review_date` to monitor daily submission volume trends.
+   * **Top 5 Customers:** Aggregates by `customer_id`, counting total reviews submitted to find the most active platform users.
+   * **Rating Distribution:** Groups by `rating` (1–5 stars) and counts occurrences to evaluate overall customer sentiment.
+4. **Optimized Storage Materialization:** The resulting aggregated dataframes are written out to S3 using the **Parquet** columnar format, which optimizes downstream querying performance and reduces storage costs compared to raw CSV.
+
+---
 
 ## 🛠️ Technology Stack
 
