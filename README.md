@@ -166,3 +166,19 @@ To avoid any future charges (especially if you're on the Free Tier), be sure to 
 2.  Delete the `start_glue_job_trigger` Lambda function.
 3.  Delete the `process_reviews_job` Glue job.
 4.  Delete the `AWSGlueServiceRole-Reviews` IAM role.
+
+---
+
+## 📸 Pipeline Run Evidence
+
+**S3 upload trigger wired to the Lambda function:**
+![S3 trigger](screenshots/trigger.png)
+
+**Glue job run succeeded:**
+![Glue job succeeded](screenshots/Aws_Glue_Job.png)
+
+**All four analytical query outputs in the processed bucket:**
+![Athena Results folders](screenshots/Athena_results.png)
+
+**Parquet output file inside the average_rating_by_product folder:**
+![Parquet output file](screenshots/athena_results_sub_file.png)
