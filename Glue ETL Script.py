@@ -13,10 +13,10 @@ glueContext = GlueContext(sc)
 spark = glueContext.spark_session
 job = Job(glueContext)
 
-# --- Define S3 Paths (Updated with your new names) ---
-s3_input_path = "s3://handsonfinallanding/"
-s3_processed_path = "s3://handsonfinalprocessed/processed-data/"
-s3_analytics_path = "s3://handsonfinalprocessed/Athena Results/"
+# --- Define S3 Paths ---
+s3_input_path = "s3://handsonfinallanding-unc801438826/"
+s3_processed_path = "s3://handsonfinalprocessed-unc801438826/processed-data/"
+s3_analytics_base = "s3://handsonfinalprocessed-unc801438826/Athena Results/"
 
 # --- Read the data from the S3 landing zone ---
 dynamic_frame = glueContext.create_dynamic_frame.from_options(
@@ -26,66 +26,95 @@ dynamic_frame = glueContext.create_dynamic_frame.from_options(
     format_options={"withHeader": True, "inferSchema": True},
 )
 
-# Convert to a standard Spark DataFrame for easier transformation
 df = dynamic_frame.toDF()
 
-# --- Perform Transformations ---
-# 1. Cast 'rating' to integer and fill null values with 0
-df_transformed = df.withColumn("rating", coalesce(col("rating").cast("integer"), lit(0)))
+# --- Data Cleansing ---
+# Cast rating to integer first so non-numeric/blank values become null
+df = df.withColumn("rating", col("rating").cast("integer"))
 
-# 2. Convert 'review_date' string to a proper date type
-df_transformed = df_transformed.withColumn("review_date", to_date(col("review_date"), "yyyy-MM-dd"))
+# Drop rows missing a valid rating or customer_id
+df_clean = df.dropna(subset=["rating", "customer_id"])
 
-# 3. Fill null review_text with a default string
-df_transformed = df_transformed.withColumn("review_text",
-    coalesce(col("review_text"), lit("No review text")))
+# --- Transformations ---
+df_transformed = df_clean.withColumn(
+    "review_date", to_date(col("review_date"), "yyyy-MM-dd")
+)
+df_transformed = df_transformed.withColumn(
+    "review_text", coalesce(col("review_text"), lit("No review text"))
+)
+df_transformed = df_transformed.withColumn(
+    "product_id_upper", upper(col("product_id"))
+)
 
-# 4. Convert product_id to uppercase for consistency
-df_transformed = df_transformed.withColumn("product_id_upper", upper(col("product_id")))
-
-
-# --- Write the full transformed data to S3 (Good practice) ---
-# This saves the clean, complete dataset to the 'processed-data' folder
+# --- Write the full cleaned dataset to S3 as Parquet ---
 glue_processed_frame = DynamicFrame.fromDF(df_transformed, glueContext, "transformed_df")
 glueContext.write_dynamic_frame.from_options(
     frame=glue_processed_frame,
     connection_type="s3",
     connection_options={"path": s3_processed_path},
-    format="csv"
+    format="parquet",
 )
 
-# --- Run Spark SQL Query within the Job ---
-
-# 1. Create a temporary view in Spark's memory
+# --- Run Spark SQL Analytics ---
 df_transformed.createOrReplaceTempView("product_reviews")
 
-# 2. Run your SQL query
-df_analytics_result = spark.sql("""
-    SELECT 
-        product_id_upper, 
-        AVG(rating) as average_rating,
-        COUNT(*) as review_count
+
+def write_query_result(sql, name):
+    """Run a SQL query and write the single-file Parquet result to its own subfolder."""
+    result_df = spark.sql(sql).repartition(1)
+    result_frame = DynamicFrame.fromDF(result_df, glueContext, name)
+    glueContext.write_dynamic_frame.from_options(
+        frame=result_frame,
+        connection_type="s3",
+        connection_options={"path": f"{s3_analytics_base}{name}/"},
+        format="parquet",
+    )
+    print(f"Wrote {name} results to {s3_analytics_base}{name}/")
+
+
+# 1. Daily Review Counts
+write_query_result(
+    """
+    SELECT review_date, COUNT(*) AS review_count
+    FROM product_reviews
+    GROUP BY review_date
+    ORDER BY review_date
+    """,
+    "daily_review_counts",
+)
+
+# 2. Top 5 Most Active Customers
+write_query_result(
+    """
+    SELECT customer_id, COUNT(*) AS review_count
+    FROM product_reviews
+    GROUP BY customer_id
+    ORDER BY review_count DESC
+    LIMIT 5
+    """,
+    "top_5_customers",
+)
+
+# 3. Overall Rating Distribution
+write_query_result(
+    """
+    SELECT rating, COUNT(*) AS count
+    FROM product_reviews
+    GROUP BY rating
+    ORDER BY rating
+    """,
+    "rating_distribution",
+)
+
+# Bonus: keep the original average-rating-per-product query too
+write_query_result(
+    """
+    SELECT product_id_upper, AVG(rating) AS average_rating, COUNT(*) AS review_count
     FROM product_reviews
     GROUP BY product_id_upper
     ORDER BY average_rating DESC
-""")
-
-# 3. Write the query's result DataFrame to your 'Athena Results' path
-print(f"Writing analytics results to {s3_analytics_path}...")
-
-# repartition(1) writes the result as a single file
-analytics_result_frame = DynamicFrame.fromDF(df_analytics_result.repartition(1), glueContext, "analytics_df")
-glueContext.write_dynamic_frame.from_options(
-    frame=analytics_result_frame,
-    connection_type="s3",
-    connection_options={"path": s3_analytics_path},
-    format="csv"
+    """,
+    "average_rating_by_product",
 )
-
-# Write the spark queries for following:
-# 2. Date wise review count: his query calculates the total number of reviews submitted per day.
-# 3. Top 5 Most Active Customers: This query identifies your "power users" by finding the customers who have submitted the most reviews.
-# 4. Overall Rating Distribution: This query shows the count for each star rating (1-star, 2-star, etc.)
-
 
 job.commit()
