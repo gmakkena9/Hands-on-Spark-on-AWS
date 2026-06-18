@@ -7,7 +7,7 @@ The pipeline automatically ingests raw CSV product review data, processes it usi
 
 ---
 
-## 📊 Project Overview
+## Project Overview
 
 The core problem this project solves is the need for manual data processing. In a typical scenario, data lands in S3 and waits for a data engineer to run a job. This project automates that entire workflow.
 
@@ -20,7 +20,7 @@ The core problem this project solves is the need for manual data processing. In 
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 
 
@@ -28,7 +28,7 @@ The core problem this project solves is the need for manual data processing. In 
 `S3 (Upload) -> Lambda (Trigger) -> AWS Glue (Spark Job) -> S3 (Processed Results)`
 
 ---
-### 🔐 IAM Permissions Breakdown
+### IAM Permissions Breakdown
 
 For this pipeline to work seamlessly, two key security boundaries are established:
 * **Lambda Execution Role:** Granted `glue:StartJobRun` permissions so it has the authority to spin up the Glue Spark cluster when an S3 event fires.
@@ -36,7 +36,7 @@ For this pipeline to work seamlessly, two key security boundaries are establishe
 
 ---
 
-## 🧠 Under the Hood: PySpark & SQL Logic
+## Under the Hood: PySpark & SQL Logic
 
 Instead of treating the scripts like a black box, here is exactly what happens to the data during the Glue ETL execution:
 
@@ -50,7 +50,7 @@ Instead of treating the scripts like a black box, here is exactly what happens t
 
 ---
 
-## 🛠️ Technology Stack
+## Technology Stack
 
 * **Data Lake:** Amazon S3
 * **ETL (Spark):** AWS Glue
@@ -60,7 +60,7 @@ Instead of treating the scripts like a black box, here is exactly what happens t
 
 ---
 
-## 🔧 Setup and Deployment
+## Setup and Deployment
 
 Follow these steps to deploy the pipeline in your own AWS account.
 
@@ -137,7 +137,7 @@ The new Lambda role needs permission to start a Glue job.
 
 ---
 
-## 🚀 How to Run the Pipeline
+## How to Run the Pipeline
 
 Your pipeline is now fully deployed and automated!
 
@@ -159,7 +159,7 @@ After the job (which may take 2-3 minutes to run), navigate to your `handsonfina
 You will also find the complete, cleaned dataset in `s3://handsonfinalprocessed/processed-data/`.
 
 ---
-## 🧹 Cleanup
+## Cleanup
 
 To avoid any future charges (especially if you're on the Free Tier), be sure to delete the resources you created:
 1.  Empty and delete the `handsonfinallanding` and `handsonfinalprocessed` S3 buckets.
